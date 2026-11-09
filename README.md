@@ -31,6 +31,49 @@ Tanpa env, aplikasi berjalan dalam **mode demo lokal dengan data simulasi**. Dat
 
 Lokal: Node 20+, `npm ci`, salin `.env.example` ke `.env`, lalu `npm run dev`.
 
+## Update pilihan toko tanpa ID eksternal (005)
+
+Jika migrasi 004 sudah dipasang, jalankan **hanya `supabase/migrations/005_selected_shop.sql` sekali**, lalu upload kode terbaru dan redeploy. Jika migrasi sebelumnya belum dipasang, jalankan yang belum terpasang berurutan 002 → 003 → 004 → 005. Jangan ulang `schema.sql` pada database yang sudah terpasang. Instalasi baru tetap cukup satu `schema.sql` yang sudah mencakup seluruh pembaruan.
+
+Pembuatan toko **tidak meminta ID marketplace lagi**. Semua file, termasuk CSV Shopee tanpa baris ID Toko atau dengan ID metadata yang berbeda, masuk ke **akun toko yang dipilih pada form upload**. Nama toko CSV bila tersedia ditampilkan sebagai informasi pratinjau, bukan pengecekan identitas. Pastikan pilihan akun toko benar sebelum menyimpan. Tanggal dan jenis file tetap divalidasi, dan hak akses toko tetap diperiksa di database.
+
+Kolom lama `external_id` dipertahankan untuk kompatibilitas data; tidak digunakan untuk menentukan tujuan atau menolak impor. Indeks unik ID eksternal dilepas. UUID toko internal tetap dipakai untuk memisahkan laporan, mencegah duplikasi, serta menerapkan penugasan/RLS. Data historis tidak dipindahkan atau dihapus. Env tetap sama.
+
+## Update upload bertahap (004)
+
+Jika migrasi 002 dan 003 sudah dipasang, jalankan **hanya `supabase/migrations/004_partial_uploads.sql` sekali**, kemudian deploy kode terbaru. Jika salah satu migrasi sebelumnya belum dipasang, jalankan yang belum terpasang secara berurutan: 002 → 003 → 004. **Jangan ulang `schema.sql` pada database yang sudah terpasang.** Untuk instalasi baru, satu `schema.sql` sudah mencakup seluruh pembaruan.
+
+Shopee sekarang boleh mengunggah **satu file saja atau kombinasi file**. Pesanan boleh masuk dahulu, sedangkan CSV iklan menyusul; CSV juga bisa masuk lebih dahulu tanpa pesanan. Hanya sumber yang dipilih yang diperbarui. File dalam satu upload tetap harus cocok toko dan tanggalnya. Upload pesanan Shopee tanpa CSV boleh memuat beberapa tanggal; CSV iklan tetap satu hari.
+
+- Sumber iklan disimpan terpisah di `mp_ad_parts` menurut toko/tanggal/jenis; keberadaan sumber pesanan dicatat di `mp_order_days`.
+- Ringkasan, Biaya & Iklan, dan halaman Upload menunjukkan kelengkapan **Pesanan / Keseluruhan / Rincian otomatis / Iklan toko**. Sumber belum diunggah ditandai, bukan dianggap biaya nol yang sudah direkonsiliasi. KPI parsial adalah sementara. Status 4/4 berarti empat sumber utama tersedia, bukan berarti biaya affiliate/fee aktual sudah direkonsiliasi.
+- Tanpa rincian otomatis, total otomatis dari file keseluruhan ditampilkan **sekali** di tingkat toko sebagai Otomatis belum terurai. Saat rincian yang cocok datang, baris ringkasan diganti dengan detail dan selisih pembulatannya; tidak ditambahkan lagi.
+- Jika file otomatis datang lebih dahulu, total/detailnya bisa ditampilkan sambil menunggu keseluruhan dan iklan toko.
+- Jika total otomatis antara keseluruhan dan rincian berbeda, total dari file keseluruhan diprioritaskan; breakdown otomatis ditahan. Kedua snapshot dipertahankan dan status meminta sinkronisasi. Unggah ulang file periode/toko yang sama dengan data yang cocok.
+- Waktu ekspor diperiksa **per sumber**. File rincian lama tidak menimpa rincian baru; mengunggah pesanan saja tidak menghapus iklan, dan mengunggah satu CSV tidak menghapus sumber lain atau CPAS/manual.
+- Snapshot lama dari versi wajib empat file diinisialisasi menjadi sumber terpisah tanpa mengubah angka pesanan, iklan, pajak, atau aktornya. RPC lama `mp_import_data` tetap tersedia sebagai adapter kompatibilitas; frontend baru memakai `mp_import_partial`.
+- Semua file yang dipilih dalam satu proses disimpan atomik. Jika satu sumber tidak valid, seluruh perubahan batch dibatalkan.
+
+## Update aturan Awalan SKU (PRIMA → Primagold)
+
+Jika sudah memasang Master SKU Bersama (migrasi 002), jalankan **hanya `supabase/migrations/003_sku_prefix.sql` sekali**, kemudian unggah kode terbaru dan redeploy. Jika belum memasang 002, jalankan `002_shared_sku.sql` dahulu, baru 003. **Jangan mengulang `schema.sql` pada database yang sudah terpasang.** Untuk instalasi baru, `schema.sql` sudah mencakup semua pembaruan; cukup satu file tersebut.
+
+Form mapping SKU baru default ke **Awalan SKU**. Isi `PRIMA`, pilih `Primagold`, lalu simpan tanpa memasukkan jumlah unit. SKU `PRIMA 1`, `PRIMA4`, `PRIMA 10`, dan `PRIMA-5` akan dikenali sebagai 1, 4, 10, dan 5 box. Aturan berlaku untuk semua toko dan seluruh rekap, termasuk laporan yang sudah diimpor; tidak perlu upload ulang. Contoh lain `HRB → Herbapil` dan `IDS → Iwe Darken Shampoo`. Awalan harus huruf, tidak memuat angka. Pisahkan aturan alias berbeda bila perlu: PRIMA dan PRIMAGOLD tidak dianggap sama secara otomatis.
+
+Kolom `match_mode` pada `mp_skus` membedakan **prefix** (awalan, units null) dan **exact** (SKU khusus lengkap, units tetap). Mapping lama tetap exact, tidak dikonversi atau dihapus diam-diam. Urutan prioritas: SKU khusus bersama → mapping lama per toko yang belum disatukan → aturan awalan. Karena itu, pengecualian paket khusus tetap berlaku. Satu awalan dan satu SKU khusus dengan teks sama boleh ada sebagai aturan terpisah.
+
+Angka paket dibaca dari SKU sumber, bukan dari judul atau harga. Awalan tidak menetapkan jumlah default pada kode tanpa angka. Volume seperti 30 ML, bundle campuran PRIMA 4 + HRB 1, ID numerik, angka nol, atau angka di luar rentang 1–1000 tidak ditebak. Buat SKU khusus untuk kasus yang memang memerlukan isi paket manual. Bonus GS tanpa angka dapat diperlakukan sebagai bonus di luar jumlah produk utama, mengikuti mapping versi sebelumnya.
+
+## Update Master SKU Bersama dari versi sebelumnya
+
+Jika Marketplace sudah terpasang, jalankan **hanya `supabase/migrations/002_shared_sku.sql` sekali**, kemudian unggah perubahan kode dan redeploy. **Jangan ulang `schema.sql`.** Untuk instalasi baru, `schema.sql` sudah mencakup pembaruan ini; tidak perlu menjalankan migrasi lagi. File `supabase/tests/fixtures/001_store_sku.sql` hanya untuk tes, bukan pemasangan.
+
+Master SKU baru berada di `mp_skus`, berlaku pada **seluruh toko dan platform**. Produk dan isi paket yang konsisten dari mapping SKU lama disatukan otomatis. Mapping lama tidak dihapus. SKU yang produk/isi paketnya berbeda antartoko muncul di tab **Konflik lama** untuk dipilih admin sebagai satu master bersama. Selama belum disatukan, rekap toko tersebut memakai mapping lamanya agar angka unit tidak berubah diam-diam. Setelah admin menyimpan master, semua toko mengikuti pilihan tersebut; data pesanan dan omzet tetap utuh.
+
+Kode Produk iklan tetap disimpan di `mp_mappings` dan **tetap per toko**. Pembuatan/edit SKU pada tabel lama diblokir; gunakan `mp_skus` untuk SKU. Anggota aktif dapat membaca master SKU bersama, tetapi hanya admin yang boleh mengubahnya. Hak akses laporan/keuangan tetap mengikuti penugasan toko.
+
+Untuk SKU khusus lengkap, isi paket masih dapat dibaca otomatis pada form dari kode yang dikenali, misalnya PRIMA 4 → Primagold 4 box. Nilai disimpan saat admin menyimpan master; format yang ambigu tetap memerlukan pengecekan. Mapping khusus yang sudah tersimpan tidak ditimpa diam-diam ketika form dibuka.
+
 ## Akses
 
 - **Admin:** semua toko, laporan, impor, biaya, pengaturan produk/mapping, penugasan, dan akun.
@@ -43,16 +86,16 @@ Semua tabel menggunakan RLS. Penulisan pesanan, iklan impor, riwayat, dan peruba
 
 Supabase Auth tetap satu. Bila email sudah terdaftar pada aplikasi lain, masuk dengan akun Auth yang sama lalu Ajukan akses Marketplace. Profil Marketplace tetap terpisah di `mp_profiles`. Signup ini memakai metadata `app: marketplace_adsy` tanpa `account_role`, sehingga tidak memicu pembuatan profil Akuisisi. Trigger Marketplace mengabaikan signup aplikasi lain. Coexistence dengan schema Akuisisi dan CRM telah diuji lokal.
 
-## Upload Shopee: 4 file dari toko dan satu tanggal yang sama
+## Upload Shopee: 4 jenis sumber, boleh bertahap
 
 1. **Order.all...xlsx**: pesanan semua status.
 2. **Data Keseluruhan Iklan Shopee...csv**: biaya iklan produk biasa dan total otomatis.
 3. **Rincian Data Iklan Produk Otomatis...csv**: rincian otomatis per Kode Produk.
 4. **Shop Ads Overall Data...csv**: biaya iklan toko.
 
-Pilih toko dengan **ID Toko yang sesuai metadata CSV**. Sistem menolak ID toko atau tanggal yang tidak cocok. CSV iklan harus diekspor per satu hari; rentang beberapa hari hanya berisi agregat dan tidak dapat dipecah akurat. File pesanan dalam satu bundle Shopee harus memakai tanggal harian yang sama dengan ketiga CSV.
+Pilih akun toko tujuan pada form. ID toko eksternal tidak diperlukan atau dicocokkan; nama toko CSV hanya informasi tambahan. Tanggal laporan tetap divalidasi. CSV iklan harus diekspor per satu hari; rentang beberapa hari hanya berisi agregat dan tidak dapat dipecah akurat. Jika pesanan dan CSV diunggah bersama, tanggalnya harus sama. Jika diunggah terpisah, tiap sumber akan masuk ke tanggalnya sendiri.
 
-Biaya = iklan produk biasa + rincian otomatis + iklan toko + selisih pembulatan otomatis. Baris total otomatis **tidak ditambahkan lagi**. Selisih kecil antara total dan detail otomatis dicatat di tingkat toko, bukan dibebankan sembarang ke produk. Selisih terlalu besar atau total otomatis yang berbeda antarfile ditolak.
+Biaya = iklan produk biasa + rincian otomatis + iklan toko + selisih pembulatan otomatis. Baris total otomatis **tidak ditambahkan lagi**. Selisih kecil antara total dan detail otomatis dicatat di tingkat toko, bukan dibebankan sembarang ke produk. Selisih detail terhadap total file otomatis yang terlalu besar ditolak. Bila total file keseluruhan dan file rincian berbeda, breakdown ditahan dan sumber diberi tanda perlu sinkronisasi sampai cocok.
 
 Contoh sumber yang dianalisis memberi total dasar **Rp907.719**, pajak **11% = Rp99.849,09**, dan total **Rp1.007.568,09**. Ketiganya ditampilkan terpisah. Tarif pajak Shopee awal 11%, dapat diatur per toko; tarif disimpan bersama baris impor. Pembaruan pengaturan pajak tidak mengubah impor yang sudah tersimpan kecuali tanggal tersebut diimpor ulang.
 
@@ -94,13 +137,14 @@ Retur parsial/refund ditandai untuk pemeriksaan; tidak otomatis mengurangi omzet
 
 ## Mapping produk dan paket
 
-Master produk Marketplace dipakai bersama seluruh toko, tetapi terpisah dari master Akuisisi/CRM. Mapping dibuat **per toko**:
+Master produk Marketplace dipakai bersama seluruh toko, tetapi terpisah dari master Akuisisi/CRM. Mapping dibedakan menurut jenis:
 
-- Jenis **SKU pesanan**: kode SKU → produk master + isi fisik per paket. Contoh PRIMA 4 = 4 box; Quantity 2 = 8 box, tetap satu pesanan bila nomor pesanannya sama.
-- Jenis **Kode Produk iklan**: ID listing dari CSV → produk master. Biaya iklan produk biasa dan otomatis kemudian dapat direkap menurut keluarga produk.
+- Jenis **SKU pesanan bersama (`mp_skus`)**: hubungkan **awalan** ke produk master sekali untuk seluruh toko, misalnya **PRIMA → Primagold**. Turunan SKU PRIMA 1/4/10 mengikuti angka paketnya. Pilihan SKU lengkap khusus tetap tersedia untuk pengecualian. **Isi paket dibaca otomatis dari SKU** yang dikenali setelah produk dipilih: PRIMA 4/PRIMA4 → Primagold 4 box, PRIMA 10 → 10 box, HRB 1 → Herbapil 1 botol, YOU 1 → Youzhi 1 botol, dan Ids1 → Iwe Darken Shampoo 1 pcs. Quantity 2 × PRIMA 4 berarti 8 box, tetap satu pesanan bila nomor pesanan sama. Aturan awalan menyimpan awalan dan produk; jumlah unit dihitung dari masing-masing SKU sumber saat membaca laporan. SKU khusus lengkap menyimpan jumlah unit tetap.
+- Jenis **Kode Produk iklan (`mp_mappings`)**: ID listing dari CSV → produk master **per toko**. Biaya iklan produk biasa dan otomatis kemudian dapat direkap menurut keluarga produk.
+- Kode yang ambigu (ID numerik, volume 30 ML, bundle campuran, atau alias produk tidak dikenal) **tidak ditebak**. Isi paket perlu diperiksa manual pada format tersebut. Untuk pengecualian, buat SKU lengkap khusus; jumlahnya dapat diganti lewat pilihan Isi paket berbeda? Atur manual. Mapping lama dengan isi paket khusus yang berbeda dari pembacaan SKU tetap dibuka dalam mode manual; tidak diganti diam-diam.
 - Penulisan kode diseragamkan ke huruf besar dan spasi tunggal. `PRIMA4` dan `PRIMA 4` tetap kode berbeda, dan dapat sama-sama dipetakan ke Primagold.
 - Impor boleh disimpan sebelum mapping lengkap. Omzet/pesanan tetap dihitung; unit fisik yang belum terpetakan tidak ditebak. Daftar Belum Dipetakan memudahkan admin melengkapi kode setelah impor, tanpa upload ulang.
-- Mapping berlaku pada riwayat juga; perubahan produk/isi paket mengubah rekap kode tersebut. Ini sengaja digunakan untuk memperbaiki mapping yang salah, bukan snapshot master per tanggal.
+- Master SKU berlaku pada riwayat seluruh toko juga; perubahan produk/isi paket mengubah rekap kode tersebut di semua toko. Ini sengaja digunakan untuk memperbaiki mapping yang salah, bukan snapshot master per tanggal.
 - Bundle satu SKU saat ini dipetakan ke satu produk utama dan isi paketnya. Bonus atau bundle lintas beberapa produk belum dipecah menjadi beberapa produk.
 
 Iklan toko tidak memiliki Kode Produk. Biayanya dicatat pada tingkat toko, bukan dialokasikan otomatis. Saat filter produk aktif, biaya toko bersama, selisih, dan komisi bersama dikecualikan dari KPI produk dengan catatan yang terlihat. Estimasi fee persentase pada omzet produk masih bisa dihitung; fee aktual bersama tidak dialokasikan.
@@ -126,9 +170,9 @@ Halaman Biaya & Iklan menyediakan **Per produk & toko** dan **Rincian sumber**. 
 - Sidik file identik per toko dilewati, tidak menambah laporan. Batch file berisi byte yang sama tidak perlu diimpor ulang walaupun nama file diganti.
 - Pesanan yang muncul pada file baru diganti seluruh rincian itemnya secara atomik berdasarkan toko + nomor pesanan. Pesanan yang tidak muncul pada file baru tidak dihapus: ekspor bisa berupa sebagian rentang/status.
 - File dengan waktu ekspor lebih tua tidak menimpa pesanan/iklan yang sudah memiliki snapshot lebih baru. Perlindungan bergantung pada waktu ekspor yang dimasukkan secara benar; format sumber tidak selalu menyediakan waktu pembaruan lengkap.
-- Biaya Shopee diganti sebagai satu snapshot penuh untuk tanggal tersebut. File lama tidak menambah biaya baru atau menggandakan total.
+- Setiap komponen Shopee diperbarui sebagai snapshot sumbernya sendiri. Rekap iklan tanggal itu disusun ulang dari sumber yang tersedia, tanpa menghitung ringkasan dan detail otomatis dua kali.
 - Impor gagal membatalkan seluruh perubahan transaksi. Dua impor toko yang sama diserialkan di database.
-- Maksimum 25 MB/file, 20.000 baris pesanan/batch, dan 10.000 baris iklan/batch. CSV Shopee UTF-8 berkoma sesuai contoh. Workbook/format lain yang headernya berbeda ditolak agar angka tidak ditebak.
+- Maksimum 25 MB/file, 20.000 baris pesanan/batch, dan 10.000 baris iklan/batch. CSV Shopee UTF-8 berkoma sesuai contoh. Untuk file pesanan kosong tanpa baris data, tanggal cakupan tidak dapat ditentukan dan file ditolak; sumber pesanan tanggal tersebut tidak otomatis ditandai lengkap. Workbook/format lain yang headernya berbeda ditolak agar angka tidak ditebak.
 
 ## Data dan verifikasi
 
@@ -144,6 +188,20 @@ npm run test:db
 npm run build
 ```
 
-Tes meliputi CSV/RFC quoting, format angka Indonesia, ID panjang, perbaikan row XML TikTok, mapping paket, deduplikasi pesanan campuran, rekonsiliasi biaya otomatis tanpa hitung ganda, snapshot lama, perubahan status, akses toko/RLS, beberapa admin, pending signup, biaya manual, actor/tax snapshot, dan rollback impor. Coexistence penuh schema Akuisisi + CRM + Marketplace juga diuji PostgreSQL lokal.
+Tes meliputi CSV/RFC quoting, format angka Indonesia, ID panjang, perbaikan row XML TikTok, mapping paket, deduplikasi pesanan campuran, rekonsiliasi biaya otomatis tanpa hitung ganda, snapshot lama, perubahan status, akses toko/RLS, beberapa admin, pending signup, biaya manual, actor/tax snapshot, rollback impor, migrasi master SKU bersama, deduplikasi consensus dan pelestarian konflik mapping lama. Coexistence penuh schema Akuisisi + CRM + Marketplace juga diuji PostgreSQL lokal.
 
 Build produksi dan render komponen server telah diperiksa. **Browser interaktif belum diuji** karena alat browser tidak tersedia pada lingkungan ini. Koneksi Supabase/Vercel pengguna belum dijalankan; perlu memasang SQL dan env sendiri. Grafik harian menampilkan maksimal 366 hari; kartu/rekap/ekspor tetap mengikuti seluruh rentang. Pembacaan tabel Supabase dipaginasi agar tidak terpotong batas 1.000 baris API; volume data sangat besar tetap memerlukan optimasi query server lanjutan.
+
+## Pembaruan: manajemen toko, upload, target, judul iklan
+
+**Database yang sudah terpasang sampai 005:** jalankan hanya `supabase/migrations/006_management_targets_titles.sql` sekali di SQL Editor. Instalasi baru: jalankan `supabase/schema.sql` saja. Jangan menjalankan schema penuh lagi pada database yang sudah berisi tabel. Env Vercel tetap sama.
+
+- Admin dapat menghapus toko kosong. Toko berisi laporan/riwayat biaya harus digabung atau dinonaktifkan. Nama toko baru dicegah duplikat pada platform yang sama (huruf besar/kecil dan spasi diseragamkan).
+- Gabungkan toko memindahkan laporan, sumber iklan, target, biaya dan mapping ke toko tujuan aktif dengan platform sama. Pesanan/file/sumber harian/biaya/target yang bertabrakan memblokir transaksi. Hapus upload duplikat atau selesaikan data terlebih dahulu. Anggota asal hanya disalin jika opsi tersebut dicentang; mereka kemudian memperoleh seluruh akses toko tujuan.
+- Hapus upload hanya menghapus hasil yang **masih dimiliki batch itu**. Versi lama tidak dipulihkan. Hasil lebih baru tetap ada; rekap Shopee disusun ulang dari sumber tersisa. Batch yang dihapus dapat diunggah ulang. Ini bukan arsip snapshot atau fitur undo.
+- Edit penugasan hanya memilih anggota aktif; penugasan akun nonaktif yang tidak lagi terlihat di pilihan dibersihkan saat simpan. Hapus penugasan mencabut akses, tanpa menghapus laporan.
+- Target bulanan berisi omzet dan unit fisik untuk kombinasi toko/produk. Admin mengatur; anggota melihat toko yang ditugaskan. Realisasi hanya dari pesanan aktif pada bulan tersebut dengan mapping SKU produk.
+- Nama produk aktif otomatis dicocokkan sebagai frasa pada judul iklan; alias bersama diatur lewat Produk & Mapping → Judul iklan. Mapping kode manual diprioritaskan. Kecocokan beberapa produk tidak ditebak. Iklan toko, ringkasan otomatis dan rekonsiliasi tetap menjadi biaya bersama. Perubahan mapping juga mengubah pengelompokan laporan historis.
+- Aksi penghapusan/penggabungan/penugasan server dicatat di `mp_admin_events`, tersedia bagi admin lewat database.
+
+Verifikasi tambahan mencakup penghapusan batch lama tanpa menghapus versi baru, penyusunan ulang iklan setelah hapus sumber, penggabungan dengan pelestarian biaya/target, larangan nama toko ganda, dan RLS target/aturan judul. Browser interaktif belum tersedia untuk uji klik dan tampilan ponsel.
