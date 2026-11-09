@@ -1,0 +1,3 @@
+import {norm} from './model.js';
+export function legacySkuGroups(data){const shared=new Set((data.skus||[]).map(m=>norm(m.code))),groups=new Map();for(const m of data.mappings||[]){if(m.kind!=='sku'||shared.has(norm(m.code)))continue;const code=norm(m.code),rows=groups.get(code)||[];rows.push(m);groups.set(code,rows);}return [...groups].map(([code,rows])=>({code,rows,conflict:new Set(rows.map(m=>m.product_id+'|'+m.units)).size>1}));}
+export function upgradeSharedSkuDemo(data){const next={...data,skus:data.skus||[]};const consensus=legacySkuGroups(next).filter(g=>!g.conflict);return {...next,skus:[...next.skus,...consensus.map(g=>({id:'shared-'+g.rows[0].id,code:g.code,product_id:g.rows[0].product_id,units:g.rows[0].units}))]};}
