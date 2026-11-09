@@ -1,3 +1,4 @@
+import {resolvePrefixSku} from './skuPrefix.js';
 export const platforms={shopee:'Shopee',tiktok:'TikTok Shop',lazada:'Lazada'};
 export const statuses={valid:'Aktif',cancelled:'Dibatalkan',unpaid:'Belum Bayar',returned:'Dikembalikan',unknown:'Perlu Dicek',mixed:'Status Campuran'};
 export const money=n=>new Intl.NumberFormat('id-ID',{style:'currency',currency:'IDR',maximumFractionDigits:0}).format(n||0);
@@ -5,7 +6,7 @@ export const num=n=>new Intl.NumberFormat('id-ID',{maximumFractionDigits:2}).for
 export const today=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Jakarta'});
 export const norm=v=>String(v??'').trim().replace(/\s+/g,' ').toUpperCase();
 export const round=n=>Math.round((n+Number.EPSILON)*100)/100;
-export function productFor(data,shop,type,key){return (type==='sku'?data.skus?.find(m=>m.code===norm(key)):null)||data.mappings.find(m=>m.shop_id===shop&&m.kind===type&&m.code===norm(key));}
+export function productFor(data,shop,type,key){return (type==='sku'?data.skus?.find(m=>m.match_mode!=='prefix'&&m.code===norm(key)):null)||data.mappings.find(m=>m.shop_id===shop&&m.kind===type&&m.code===norm(key))||(type==='sku'?resolvePrefixSku(data,key):undefined);}
 export function scopeData(data,me){if(!me||me.status!=='active')return {...data,shops:[],orders:[],ads:[],daily:[],imports:[],mappings:[],skus:[]};if(me.role==='admin')return data;const ids=new Set(data.assignments.filter(a=>a.profile_id===me.id&&a.active).map(a=>a.shop_id));return {...data,...Object.fromEntries(['shops','orders','ads','daily','imports','mappings'].map(k=>[k,data[k].filter(r=>ids.has(k==='shops'?r.id:r.shop_id))]))};}
 export function filtered(data,f){const shops=data.shops.filter(s=>(!f.platform||s.platform===f.platform)&&(!f.shop||s.id===f.shop)&&(!f.staff||data.assignments.some(a=>a.shop_id===s.id&&a.profile_id===f.staff&&a.active)));const ids=new Set(shops.map(s=>s.id));const inRange=r=>ids.has(r.shop_id)&&r.date>=f.from&&r.date<=f.to;const orders=data.orders.filter(inRange).filter(o=>!f.product||productFor(data,o.shop_id,'sku',o.sku)?.product_id===f.product);const ads=data.ads.filter(inRange).filter(a=>!f.product||(a.product_id||productFor(data,a.shop_id,'ad',a.product_code)?.product_id)===f.product);return {shops,orders,ads,daily:f.product?[]:data.daily.filter(inRange)};}
 export function summary({orders=[],ads=[],daily=[],shops=[]},data){const active=orders.filter(o=>o.status==='valid');const orderKeys=new Set(active.map(o=>o.shop_id+'|'+o.order_id));const revenue=round(active.reduce((a,o)=>a+Number(o.amount),0));let units=0,unmapped=0;for(const o of active){const m=productFor(data,o.shop_id,'sku',o.sku);if(m)units+=Number(o.quantity)*Number(m.units);else unmapped+=1;}
