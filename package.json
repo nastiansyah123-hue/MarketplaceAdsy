@@ -7,7 +7,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "test": "node --test src/*.test.js",
-    "test:db": "node supabase/tests/access.mjs && node supabase/tests/sharedSku.mjs && node supabase/tests/partial.mjs && node supabase/tests/management.mjs"
+    "test:db": "node supabase/tests/access.mjs && node supabase/tests/sharedSku.mjs && node supabase/tests/partial.mjs && node supabase/tests/management.mjs && node supabase/tests/receivedStatus.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.80.0",
