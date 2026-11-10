@@ -19,3 +19,10 @@ test('74-order daily export keeps 62 received orders in active revenue',()=>{
  for(let i=0;i<11;i++)rows.push(['TEST-'+id++,'Batal','2026-11-01 10:00','PRIMA 1',1,100]);rows.push(['TEST-'+id++,'Sedang Dikirim','2026-11-01 10:00','PRIMA 1',1,240000]);
  const out=parseOrders([headers,...rows],'shopee').orders,active=out.filter(o=>o.status==='valid');assert.equal(out.length,74);assert.equal(active.length,63);assert.equal(out.filter(o=>o.status==='cancelled').length,11);assert.equal(out.filter(o=>o.status==='returned').length,0);assert.equal(active.reduce((s,o)=>s+o.amount,0),10105000);
 });
+test('Overall group campaigns with dash codes are preserved separately from automatic summary',async()=>{
+ const {parseAdPart}=await import('./importers.js');const {composeShopeeAds}=await import('./adSources.js');const t=texts();t.overall=adsCSV('overall',[[1,'Iklan Produk Otomatis','-',241290,26,26,3451080],[2,'Grup Iklan A','-',700,1,1,10000],[3,'Grup Iklan B','-',0,0,0,0],[4,'Manual','p1',482451,23,23,4181525]]);
+ const part=parseAdPart(t.overall,'overall',{tax_rate:11});assert.equal(part.automatic_total,241290);assert.equal(part.rows.length,3);assert.equal(new Set(part.rows.map(r=>r.external_key)).size,3);assert.equal(part.rows.find(r=>r.label==='Grup Iklan A').product_code,'');assert.equal(part.rows.find(r=>r.label==='Grup Iklan A').spend,700);
+ const parts=['overall','automatic','shop'].map(k=>parseAdPart(t[k],k,{tax_rate:11}));assert.equal(composeShopeeAds({tax_rate:11},parts).ads.reduce((s,r)=>s+r.spend,0),908419);assert.equal(parseShopeeAds(t,{tax_rate:11}).total,908419);
+ assert.throws(()=>parseAdPart(adsCSV('overall',[[1,'Grup Iklan','-',100,0,0,0]]),'overall',{tax_rate:11}),/Iklan keseluruhan.*ditemukan 0/);
+ assert.throws(()=>parseAdPart(adsCSV('automatic',[[1,'Iklan Produk Otomatis','-',100,0,0,0],[2,'Iklan Produk Otomatis','-',100,0,0,0]]),'automatic',{tax_rate:11}),/Rincian otomatis.*ditemukan 2/);
+});
