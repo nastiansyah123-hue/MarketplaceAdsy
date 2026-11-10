@@ -205,3 +205,19 @@ Build produksi dan render komponen server telah diperiksa. **Browser interaktif 
 - Aksi penghapusan/penggabungan/penugasan server dicatat di `mp_admin_events`, tersedia bagi admin lewat database.
 
 Verifikasi tambahan mencakup penghapusan batch lama tanpa menghapus versi baru, penyusunan ulang iklan setelah hapus sumber, penggabungan dengan pelestarian biaya/target, larangan nama toko ganda, dan RLS target/aturan judul. Browser interaktif belum tersedia untuk uji klik dan tampilan ponsel.
+
+## Perbaikan status pesanan diterima (007)
+
+Parser sebelumnya salah membaca kalimat Shopee **“Pesanan diterima, namun Pembeli masih dapat mengajukan pengembalian hingga …”** sebagai retur. Kalimat itu menyatakan masa pengajuan retur masih berlaku; pesanan tersebut termasuk penjualan aktif.
+
+Untuk aplikasi terpasang, upload kode perbaikan ke GitHub/Vercel dan jalankan **`supabase/migrations/007_received_orders_status.sql`** di SQL Editor Supabase, lalu muat ulang web. SQL memperbaiki status yang salah pada semua toko/tanggal untuk kalimat Shopee tersebut, tanpa upload ulang file. Nominal, ID pesanan, waktu ekspor dan riwayat impor dipertahankan. Retur aktual, pembatalan dan platform lain tidak diubah. Hasil SQL menampilkan jumlah baris dan omzet yang dipulihkan per toko/tanggal. Aman dijalankan ulang. Script ini hanya membutuhkan tabel Marketplace yang sudah ada, tidak membutuhkan tabel tambahan dari 006. Instalasi baru cukup `schema.sql` terbaru; jangan ulang schema pada database terpasang.
+
+Berdasarkan file 1 November yang diperiksa lokal: 74 pesanan unik, terdiri dari 62 diterima dengan masa pengajuan retur, 1 sedang dikirim, 11 batal. Hasil setelah perbaikan: **63 aktif, Rp10.105.000 omzet aktif, 0 retur pada file ini**. Dashboard mengikuti snapshot terbaru yang tersimpan dan bisa berbeda bila status pesanan sudah diperbarui oleh ekspor berikutnya. File sumber asli dan data pembeli tidak dimasukkan ke repository atau ZIP.
+
+## Perbaikan impor grup iklan tanpa kode produk
+
+File Iklan keseluruhan Shopee dapat berisi beberapa baris dengan Kode Produk `-`: ringkasan Iklan Produk Otomatis serta kampanye Grup Iklan. Parser sekarang mengenali ringkasan dari nama/mode iklannya, bukan hanya kode `-`. Grup nonotomatis tetap disimpan dengan identitas terpisah dan kode produk kosong; biaya/konversinya tetap dihitung. Grup tidak otomatis dipetakan hanya berdasarkan kode `-`. Pesan validasi kini menyebut file dan jumlah ringkasan yang ditemukan.
+
+Pembaruan ini cukup mengganti kode dan redeploy Vercel, **tanpa SQL baru atau perubahan env**. Upload yang sebelumnya gagal pada Periksa file belum tersimpan; pilih kembali file dari toko/tanggal yang sama setelah pembaruan. File otomatis toko lain tidak boleh tertukar: contoh otomatis Rp408.566 berasal dari file berbeda, sedangkan pasangan Nesia tanggal 9 November menggunakan otomatis Rp98.290.
+
+Keempat file Nesia tanggal 9 November telah diuji bersama: 13 pesanan (12 aktif, 1 batal), omzet aktif Rp1.979.570; biaya iklan dasar Rp161.637, pajak 11% Rp17.780,07, total Rp179.417,07. Grup Iklan Rp0 tetap disimpan; selisih rincian otomatis Rp1 direkonsiliasi. Workbook dan CSV asli hanya diperiksa lokal, tidak dimasukkan dalam ZIP atau repository.
