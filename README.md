@@ -221,3 +221,25 @@ File Iklan keseluruhan Shopee dapat berisi beberapa baris dengan Kode Produk `-`
 Pembaruan ini cukup mengganti kode dan redeploy Vercel, **tanpa SQL baru atau perubahan env**. Upload yang sebelumnya gagal pada Periksa file belum tersimpan; pilih kembali file dari toko/tanggal yang sama setelah pembaruan. File otomatis toko lain tidak boleh tertukar: contoh otomatis Rp408.566 berasal dari file berbeda, sedangkan pasangan Nesia tanggal 9 November menggunakan otomatis Rp98.290.
 
 Keempat file Nesia tanggal 9 November telah diuji bersama: 13 pesanan (12 aktif, 1 batal), omzet aktif Rp1.979.570; biaya iklan dasar Rp161.637, pajak 11% Rp17.780,07, total Rp179.417,07. Grup Iklan Rp0 tetap disimpan; selisih rincian otomatis Rp1 direkonsiliasi. Workbook dan CSV asli hanya diperiksa lokal, tidak dimasukkan dalam ZIP atau repository.
+
+## Kalender upload per toko dan unit bonus
+
+Bagian bawah halaman Upload mengikuti toko yang dipilih. Pilih bulan untuk melihat seluruh tanggal, termasuk tanggal yang belum memiliki upload sama sekali. Perhitungan terlambat/kurang lengkap sampai **kemarin WIB**; hari ini dan tanggal mendatang tidak ditandai terlambat. Tanggal dapat dipilih untuk memeriksa sumbernya. Status lengkap/sebagian/belum diunggah tersedia sebagai filter. Shopee memerlukan 4 sumber; TikTok/Lazada cukup file pesanan (biaya iklan tetap manual). Tidak ada bukti upload tidak berarti tidak ada transaksi; pilih bulan sesuai masa operasional toko. Fitur ini tidak menandai tanggal kosong sebagai lengkap secara otomatis.
+
+Sesuai aturan bisnis, SKU bertanda `+` berarti **produk utama + bonus**: `HRB 3 + PRIMA 1` = 3 Herbapil terjual dan 1 Primagold bonus per paket. Seluruh omzet masuk produk sebelum `+`; produk setelahnya mempunyai omzet Rp0. Quantity pesanan mengalikan unit utama dan bonus. Laporan Produk memisahkan **Unit terjual** dan **Unit bonus**; kartu unit terjual serta target penjualan tidak memasukkan bonus. Filter produk bonus dapat menampilkan pesanan yang berisi bonus tersebut, dengan omzet produk bonus Rp0. Rincian pesanan dan ekspor CSV menampilkan bonus.
+
+Petakan setiap awalan di Master SKU bersama: `HRB → Herbapil`, `PRIMA → Primagold`, `TM → Teh Bajakah Mini` sesuai produk yang benar. Produk/kode bonus baru tetap harus dibuat/dipetakan admin. Bonus tanpa angka seperti `SISIR` harus memakai aturan SKU lengkap dengan isi paket yang ditentukan admin, misalnya 1 pcs bila memang satu sisir. Sistem tidak mengarang produk atau jumlah bonus. Bonus yang belum dikenali muncul di Belum dipetakan dan indikator dashboard; omzet produk utama tetap dihitung. Jika SKU lengkap bertanda `+` sudah mempunyai mapping lama, aturan komponen utama yang terpetakan diprioritaskan; mapping lengkap lama menjadi fallback jika komponen utama belum terpetakan. Perubahan mapping berlaku untuk laporan historis.
+
+Pembaruan ini cukup kode web, **tanpa SQL atau env baru**, dan tidak memerlukan upload ulang. Browser interaktif belum diuji; model kalender/bonus, filter, render komponen dan build produksi diperiksa lokal.
+
+## Nilai rupiah pada kartu Batal & Belum Bayar
+
+Kartu Dibatalkan, Gagal Bayar, Belum Bayar, Retur/Refund dan Perlu Dicek menampilkan jumlah pesanan unik serta nilai item terkait sesuai filter. Nilai ini terpisah dari omzet aktif. Satu pesanan dengan beberapa item dihitung sekali, sementara nominal dijumlahkan per item yang masuk kategori. Gagal Bayar merupakan bagian Dibatalkan; kategori tidak boleh dijumlahkan sebagai total. Nilai terkait retur menunjukkan nilai item yang ditandai, bukan nominal refund aktual atau nilai retur parsial. Filter produk bonus mengikuti aturan omzet bonus Rp0. Cukup upload kode dan redeploy; tidak ada SQL atau env baru.
+
+## Kampanye berbeda memakai kode produk sama
+
+Beberapa kampanye Shopee dapat memakai Kode Produk yang sama. Parser sekarang mempertahankan seluruh baris dan memberi identitas baris unik pada kampanye berikutnya, sementara `product_code` tetap sama untuk mapping/laporan produk. Tidak ada kampanye yang dibuang, termasuk baris Rp0; biaya dan atribusi setiap baris tetap dipertahankan. Pembaruan snapshot sumber tetap mengganti snapshot sebelumnya dan upload identik tetap dilewati.
+
+Penyebab direproduksi pada CSV keseluruhan tanggal 10 November: kode 8832208282 muncul di dua kampanye, masing-masing Rp162.319 dan Rp0. Sesudah perbaikan, 6 baris kampanye mempunyai 6 identitas unik; total biaya nonotomatis tetap Rp533.242 dan ringkasan otomatis Rp432.989, belum termasuk iklan toko/pajak. CSV asli tidak masuk repository/ZIP.
+
+Cukup upload kode perbaikan dan redeploy Vercel; **tidak perlu SQL baru atau menghapus data lama**. Muat ulang tab, pilih file yang sebelumnya gagal, periksa lalu simpan kembali. Impor yang gagal karena constraint dibatalkan secara atomik. Tes database mencakup kampanye dengan kode berulang, baris Rp0, total biaya, dan retry tanpa penggandaan.
