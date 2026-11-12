@@ -1,24 +1,80 @@
 import React,{useState,useMemo}from'react';
 import{SearchBox,Empty,usePaging,Modal}from'./ui.jsx';
 import{money,num}from'./model.js';
-import{RefreshCw,Truck,Package,MapPin,CheckCircle,AlertTriangle,Clock,ArrowRight}from'lucide-react';
+import{RefreshCw,Truck,Package,MapPin,CheckCircle,AlertTriangle,Clock,ArrowRight,RotateCcw}from'lucide-react';
 
 const STAGES={
- MENUNGGU_RESI:{label:'Menunggu Resi',color:'#94a3b8',icon:Clock,step:0},
- BELUM_DICEK:{label:'Belum Dicek',color:'#60a5fa',icon:Package,step:1},
- DIKIRIM:{label:'Dikirim',color:'#38bdf8',icon:Truck,step:2},
- KOTA_TUJUAN:{label:'Kota Tujuan',color:'#a78bfa',icon:MapPin,step:3},
- OTW:{label:'OTW Penerima',color:'#fbbf24',icon:ArrowRight,step:4},
- SAMPAI:{label:'Sampai',color:'#34d399',icon:CheckCircle,step:5},
- BERMASALAH:{label:'Bermasalah',color:'#f87171',icon:AlertTriangle,step:-1},
- RETUR:{label:'Retur',color:'#fb923c',icon:AlertTriangle,step:-2},
- MANUAL:{label:'Manual',color:'#94a3b8',icon:Clock,step:-3},
+ MENUNGGU_RESI:{label:'Menunggu Resi',color:'#94a3b8',icon:Clock,step:0,emoji:'📋'},
+ BELUM_DICEK:{label:'Belum Dicek',color:'#60a5fa',icon:Package,step:1,emoji:'📦'},
+ DIKIRIM:{label:'Dikirim',color:'#38bdf8',icon:Truck,step:2,emoji:'🚚'},
+ KOTA_TUJUAN:{label:'Kota Tujuan',color:'#a78bfa',icon:MapPin,step:3,emoji:'📍'},
+ OTW:{label:'OTW Penerima',color:'#fbbf24',icon:ArrowRight,step:4,emoji:'🏃'},
+ SAMPAI:{label:'Sampai',color:'#34d399',icon:CheckCircle,step:5,emoji:'✅'},
+ BERMASALAH:{label:'Bermasalah',color:'#f87171',icon:AlertTriangle,step:-1,emoji:'⚠️'},
+ RETUR:{label:'Retur',color:'#fb923c',icon:RotateCcw,step:-2,emoji:'↩️'},
+ MANUAL:{label:'Manual',color:'#94a3b8',icon:Clock,step:-3,emoji:'🔧'},
 };
 const STAGE_ORDER=['MENUNGGU_RESI','BELUM_DICEK','DIKIRIM','KOTA_TUJUAN','OTW','SAMPAI','BERMASALAH','RETUR'];
+const STEPPER_STAGES=['BELUM_DICEK','DIKIRIM','KOTA_TUJUAN','OTW','SAMPAI'];
 
 function stageBadge(status){
  const s=STAGES[status]||STAGES.MENUNGGU_RESI;
- return <span className="badge" style={{background:s.color+'22',color:s.color,border:'1px solid '+s.color+'44'}}>{s.label}</span>;
+ return <span className="tr-badge" style={{background:s.color+'22',color:s.color}}>{s.emoji} {s.label}</span>;
+}
+
+function avatarColor(name){
+ let h=0;for(let i=0;i<(name||'').length;i++)h=name.charCodeAt(i)+((h<<5)-h);
+ const colors=['#4361EE','#F72585','#7209B7','#3A0CA3','#4CC9F0','#06D6A0','#EF476F','#118AB2','#073B4C','#FF6B35'];
+ return colors[Math.abs(h)%colors.length];
+}
+
+function Stepper({status}){
+ const st=STAGES[status]||STAGES.MENUNGGU_RESI;
+ const currentStep=st.step;
+ const isBermasalah=currentStep<0;
+ return <div className="tr-stepper">
+  {STEPPER_STAGES.map((key,i)=>{
+   const step=STAGES[key].step;
+   const done=!isBermasalah&&currentStep>=step;
+   const active=!isBermasalah&&currentStep===step;
+   const problem=isBermasalah&&i===1;
+   return <div key={key} className={'tr-step'+(done?' tr-step-done':'')+(active?' tr-step-active':'')+(problem?' tr-step-problem':'')}>
+    {i>0&&<div className={'tr-step-line'+(done?' done':'')}/>}
+    <div className="tr-step-circle">{done&&!active?'✓':problem?'!':i+1}</div>
+    <div className="tr-step-label">{problem?(status==='RETUR'?'Retur':'Masalah'):STAGES[key].label}</div>
+   </div>;
+  })}
+ </div>;
+}
+
+function OrderCard({o,shop,onClick}){
+ const shopName=shop?.name||'—';
+ const initial=(shopName[0]||'?').toUpperCase();
+ const checkedAt=o.status_resi_updated_at?new Date(o.status_resi_updated_at).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'}):'';
+ return <div className="tr-card" onClick={onClick}>
+  <div className="tr-card-top">
+   <div className="tr-card-left">
+    <div className="tr-avatar" style={{background:avatarColor(shopName)}}>{initial}</div>
+    <div style={{minWidth:0}}>
+     <div className="tr-name">{shopName}</div>
+     <div className="tr-sub">{o.source_channel}</div>
+     <div className="tr-meta">
+      {stageBadge(o.status_resi)}
+      {o.ekspedisi&&<span className="tr-badge tr-badge-gray">{o.ekspedisi}</span>}
+     </div>
+     <div className="tr-produk">{o.sku} × {o.quantity}</div>
+    </div>
+   </div>
+   <div className="tr-card-right">
+    <div className="tr-price">{money(o.amount)}</div>
+    <div className="tr-date">{o.date}</div>
+    {o.resi&&<div className="tr-resi">{o.resi}</div>}
+    {checkedAt&&<div className="tr-checked-at">🕐 {checkedAt}</div>}
+   </div>
+  </div>
+  <div className="tr-divider"/>
+  <Stepper status={o.status_resi}/>
+ </div>;
 }
 
 function TrackingDetail({order,shop,onCheck,checking}){
@@ -27,7 +83,8 @@ function TrackingDetail({order,shop,onCheck,checking}){
  return <div className="form-body">
   <div className="detail-heading"><strong>{order.order_id}</strong>{stageBadge(order.status_resi)}</div>
   <p className="detail-shop">{shop?.name||'—'} · {order.source_channel}</p>
-  <dl>
+  <Stepper status={order.status_resi}/>
+  <dl style={{marginTop:'1.2rem'}}>
    <dt>Resi</dt><dd>{order.resi||<em>Belum ada</em>}</dd>
    <dt>Ekspedisi</dt><dd>{order.ekspedisi||'—'}</dd>
    <dt>Tanggal pesanan</dt><dd>{order.date}</dd>
@@ -61,7 +118,6 @@ export default function Tracking({data,orders}){
  const[checking,setChecking]=useState(false);
  const[toast,setToast]=useState('');
 
- // Only show orders that have tracking (status != cancelled/unpaid/returned OR have resi)
  const trackable=useMemo(()=>
   orders.filter(o=>o.status_resi!=null)
  ,[orders]);
@@ -129,25 +185,10 @@ export default function Tracking({data,orders}){
     </select>
    </div>
 
-   <div className="table-scroll">
-    <table>
-     <thead><tr>
-      <th>Pesanan / Tanggal</th>
-      <th>Toko</th>
-      <th>Resi / Ekspedisi</th>
-      <th>Status Resi</th>
-      <th>Terakhir Dicek</th>
-      <th/>
-     </tr></thead>
-     <tbody>{paging.items.map(o=><tr key={o.id||o.shop_id+o.order_id+o.line_id}>
-      <td data-label="Pesanan"><strong className="order-number">{o.order_id}</strong><small>{o.date} · {o.source_channel}</small></td>
-      <td data-label="Toko">{data.shops.find(s=>s.id===o.shop_id)?.name||'—'}</td>
-      <td data-label="Resi">{o.resi?<><strong>{o.resi}</strong><small>{o.ekspedisi||'—'}</small></>:<em style={{color:'var(--muted)'}}>Belum ada</em>}</td>
-      <td data-label="Status">{stageBadge(o.status_resi)}</td>
-      <td data-label="Dicek"><small>{o.status_resi_updated_at?new Date(o.status_resi_updated_at).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'}):'—'}</small></td>
-      <td><button className="text-button" onClick={()=>setModal(o)}>Detail</button></td>
-     </tr>)}</tbody>
-    </table>
+   <div className="tr-grid">
+    {paging.items.map(o=>
+     <OrderCard key={o.id||o.shop_id+o.order_id+o.line_id} o={o} shop={data.shops.find(s=>s.id===o.shop_id)} onClick={()=>setModal(o)}/>
+    )}
    </div>
    {!filtered.length&&<Empty text="Belum ada pesanan untuk tracking" hint="Pesanan dengan resi akan muncul setelah file diimpor."/>}
    {paging.pager}
