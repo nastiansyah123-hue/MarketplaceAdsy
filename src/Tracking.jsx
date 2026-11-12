@@ -57,11 +57,10 @@ function OrderCard({o,shop,onClick}){
     <div className="tr-avatar" style={{background:avatarColor(shopName)}}>{initial}</div>
     <div style={{minWidth:0}}>
      <div className="tr-name">{shopName}</div>
-     <div className="tr-sub">{o.order_id}</div>
+     <div className="tr-sub">{o.source_channel}</div>
      <div className="tr-meta">
       {stageBadge(o.status_resi)}
       {o.ekspedisi&&<span className="tr-badge tr-badge-gray">{o.ekspedisi}</span>}
-      <span className="tr-badge tr-badge-gray">{o.source_channel}</span>
      </div>
      <div className="tr-produk">{o.skus?o.skus.map(s=>s.sku+' × '+s.quantity).join(', '):o.sku+' × '+o.quantity}</div>
     </div>
