@@ -62,11 +62,11 @@ function OrderCard({o,shop,onClick}){
       {stageBadge(o.status_resi)}
       {o.ekspedisi&&<span className="tr-badge tr-badge-gray">{o.ekspedisi}</span>}
      </div>
-     <div className="tr-produk">{o.sku} × {o.quantity}</div>
+     <div className="tr-produk">{o.skus?o.skus.map(s=>s.sku+' × '+s.quantity).join(', '):o.sku+' × '+o.quantity}</div>
     </div>
    </div>
    <div className="tr-card-right">
-    <div className="tr-price">{money(o.amount)}</div>
+    <div className="tr-price">{money(o.totalAmount||o.amount)}</div>
     <div className="tr-date">{o.date}</div>
     {o.resi&&<div className="tr-resi">{o.resi}</div>}
     {checkedAt&&<div className="tr-checked-at">🕐 {checkedAt}</div>}
@@ -88,9 +88,8 @@ function TrackingDetail({order,shop,onCheck,checking}){
    <dt>Resi</dt><dd>{order.resi||<em>Belum ada</em>}</dd>
    <dt>Ekspedisi</dt><dd>{order.ekspedisi||'—'}</dd>
    <dt>Tanggal pesanan</dt><dd>{order.date}</dd>
-   <dt>SKU</dt><dd>{order.sku}</dd>
-   <dt>Jumlah</dt><dd>{num(order.quantity)}</dd>
-   <dt>Nilai</dt><dd>{money(order.amount)}</dd>
+   <dt>SKU</dt><dd>{order.skus?order.skus.map(s=>s.sku+' × '+s.quantity).join(', '):order.sku+' × '+order.quantity}</dd>
+   <dt>Nilai</dt><dd>{money(order.totalAmount||order.amount)}</dd>
    {order.status_resi_updated_at&&<><dt>Terakhir dicek</dt><dd>{new Date(order.status_resi_updated_at).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'})} WIB</dd></>}
    {detail?.masalah&&<><dt>Masalah</dt><dd className="danger-text">{detail.masalah}</dd></>}
    {detail?.keterangan&&<><dt>Keterangan</dt><dd>{detail.keterangan}</dd></>}
@@ -118,15 +117,37 @@ export default function Tracking({data,orders}){
  const[checking,setChecking]=useState(false);
  const[toast,setToast]=useState('');
 
- const trackable=useMemo(()=>
-  orders.filter(o=>o.status_resi!=null)
- ,[orders]);
+ // Group by order_id (1 order = 1 resi = 1 card)
+ const trackable=useMemo(()=>{
+  const map=new Map();
+  for(const o of orders){
+   if(o.status_resi==null)continue;
+   const key=o.shop_id+'|'+o.order_id;
+   const existing=map.get(key);
+   if(!existing){
+    map.set(key,{...o,skus:[{sku:o.sku,quantity:o.quantity,title:o.title}],totalAmount:Number(o.amount)});
+   }else{
+    existing.skus.push({sku:o.sku,quantity:o.quantity,title:o.title});
+    existing.totalAmount+=Number(o.amount);
+    // Pakai resi/status dari baris yang punya data paling lengkap
+    if(!existing.resi&&o.resi)existing.resi=o.resi;
+    if(!existing.ekspedisi&&o.ekspedisi)existing.ekspedisi=o.ekspedisi;
+    if(o.status_resi_updated_at>existing.status_resi_updated_at){
+     existing.status_resi=o.status_resi;
+     existing.status_resi_step=o.status_resi_step;
+     existing.status_resi_detail=o.status_resi_detail;
+     existing.status_resi_updated_at=o.status_resi_updated_at;
+    }
+   }
+  }
+  return [...map.values()];
+ },[orders]);
 
  const filtered=useMemo(()=>
   trackable.filter(o=>
    (!stage||o.status_resi===stage)&&
    (!shop||o.shop_id===shop)&&
-   (!q||(o.order_id+' '+(o.resi||'')+' '+(o.ekspedisi||'')+' '+o.sku).toLowerCase().includes(q.toLowerCase()))
+   (!q||(o.order_id+' '+(o.resi||'')+' '+(o.ekspedisi||'')+' '+o.skus.map(s=>s.sku).join(' ')).toLowerCase().includes(q.toLowerCase()))
   ).sort((a,b)=>(b.status_resi_updated_at||b.date||'').localeCompare(a.status_resi_updated_at||a.date||''))
  ,[trackable,stage,shop,q]);
 

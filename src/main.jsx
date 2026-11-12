@@ -90,7 +90,7 @@ function Stats({selected,data,s:precomputed}){const s=precomputed||useMemo(()=>s
 function Dashboard({data,selected,f,onAll,onProducts}){
  // Pakai server summary kalau ada, fallback ke client-side
  const serverSum=data._summary;const serverAd=data._adSummary;
- const s=useMemo(()=>{if(serverSum&&serverAd){const spend=Number(serverAd.spend||0),tax=Number(serverAd.tax||0),gross=round(spend+tax);return{revenue:Number(serverSum.revenue||0),orders:Number(serverSum.order_count||0),units:0,unmapped:0,unmappedBonus:0,spend:round(spend),tax:round(tax),gross,affiliate:0,fee:0,roas:gross?Number(serverSum.revenue||0)/gross:null,caq:Number(serverSum.revenue||0)?(gross)/Number(serverSum.revenue):null,cac:Number(serverSum.order_count||0)?gross/Number(serverSum.order_count):null};}return summary(selected,data);},[serverSum,serverAd,selected,data]);
+ const s=useMemo(()=>{if(serverSum&&serverAd){const spend=Number(serverAd.spend||0),tax=Number(serverAd.tax||0),gross=round(spend+tax),rev=Number(serverSum.revenue||0);return{revenue:rev,orders:Number(serverSum.order_count||0),units:Number(serverSum.units||0),unmapped:Number(serverSum.unmapped||0),unmappedBonus:0,spend:round(spend),tax:round(tax),gross,affiliate:0,fee:0,roas:gross?rev/gross:null,caq:rev?gross/rev:null,cac:Number(serverSum.order_count||0)?gross/Number(serverSum.order_count):null};}return summary(selected,data);},[serverSum,serverAd,selected,data]);
  const{days,max,cancelled,unpaid}=useMemo(()=>{
   const dailySum=data._dailySummary;
   // Pakai server daily summary kalau ada
