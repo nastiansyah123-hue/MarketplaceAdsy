@@ -137,7 +137,7 @@ export default function Tracking({data,orders}){
   return c;
  },[trackable]);
 
- const paging=usePaging(filtered,q+stage+shop+filtered.length);
+ const paging=usePaging(filtered,q+stage+shop+filtered.length,15);
 
  async function handleCheck(order){
   setChecking(true);
