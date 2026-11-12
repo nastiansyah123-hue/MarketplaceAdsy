@@ -3,22 +3,29 @@ export const supabase=import.meta.env.VITE_SUPABASE_URL&&import.meta.env.VITE_SU
 export const tables=['profiles','shops','assignments','products','skus','mappings','orders','ads','daily','imports','ad_parts','order_days','targets','ad_rules'];
 export const empty=()=>Object.fromEntries(tables.map(k=>[k,[]]));
 
-// Satu RPC call = 1 query, cek role 1x, bypass per-row RLS
-export async function loadData(signal,onProfiles,dateRange){
+// Step 1: Load profiles cepat (1 row, PK lookup, RLS ringan) → user langsung masuk dashboard
+export async function loadProfiles(signal){
+ let query=supabase.from('mp_profiles').select('*');
+ if(signal)query=query.abortSignal(signal);
+ const{data,error}=await query;
+ if(error)throw error;
+ return data||[];
+}
+
+// Step 2: RPC load semua data (1 call, bypass per-row RLS)
+export async function loadData(signal,dateRange){
  const args={p_from:dateRange?.from||null,p_to:dateRange?.to||null};
  let query=supabase.rpc('mp_load_data',args);
  if(signal)query=query.abortSignal(signal);
  const{data,error}=await query;
  if(error)throw error;
  if(data?.error==='not_active')throw new Error('Akun belum aktif.');
- // Pastikan semua key ada
  const result={};
  for(const k of tables)result[k]=data[k]||[];
- onProfiles?.(result.profiles);
  return result;
 }
 
-// Refresh spesifik tabel — tetap pakai 1 RPC (ambil semua, tapi cuma pakai yang diminta)
+// Refresh: pakai RPC yang sama, ambil yang diminta
 export async function refreshTables(signal,tableNames,dateRange){
  const args={p_from:dateRange?.from||null,p_to:dateRange?.to||null};
  let query=supabase.rpc('mp_load_data',args);
