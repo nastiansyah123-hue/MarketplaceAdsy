@@ -30,7 +30,7 @@ export default async function handler(req, res) {
       .not('status_resi', 'in', '("SAMPAI","RETUR")')
       .or(`status_resi_updated_at.is.null,status_resi_updated_at.lt.${thirtyMinAgo}`)
       .order('status_resi_updated_at', { ascending: true, nullsFirst: true })
-      .limit(50); // Max 50 per run to stay within Vercel timeout
+      .limit(200); // Max 200 per run (1x sehari, Hobby plan)
 
     if (error) throw error;
     if (!orders?.length) {
