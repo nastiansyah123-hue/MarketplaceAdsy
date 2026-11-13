@@ -78,35 +78,58 @@ function OrderCard({o,shop,onClick}){
  </div>;
 }
 
-function TrackingDetail({order,shop,onCheck,checking}){
+const COURIER_OPTIONS=['SPX','J&T','JNE','SICEPAT','ANTERAJA','NINJA','IDEXPRESS','LION','SAP','POS','Lainnya'];
+
+function TrackingDetail({order,shop,onCheck,checking,onClose}){
  const detail=order.status_resi_detail;
  const history=detail?.history||[];
+ const[editEksp,setEditEksp]=useState(order.ekspedisi||'');
+ const[saving,setSaving]=useState(false);
+
+ async function saveEkspedisi(){
+  if(!supabase||saving)return;
+  setSaving(true);
+  try{
+   const{error}=await supabase.from('mp_orders').update({ekspedisi:editEksp}).eq('order_id',order.order_id).eq('shop_id',order.shop_id);
+   if(error)throw error;
+  }catch{}finally{setSaving(false);}
+ }
+
  return <div className="form-body">
-  <div className="detail-heading"><strong>{order.order_id}</strong>{stageBadge(order.status_resi)}</div>
-  <p className="detail-shop">{shop?.name||'—'} · {order.source_channel}</p>
+  <div className="td-header">
+   <div className="td-resi-line">{order.resi||'Belum ada resi'}{order.ekspedisi?' · '+order.ekspedisi:''}</div>
+   {stageBadge(order.status_resi)}
+  </div>
+
   <Stepper status={order.status_resi}/>
-  <dl style={{marginTop:'1.2rem'}}>
-   <dt>Resi</dt><dd>{order.resi||<em>Belum ada</em>}</dd>
-   <dt>Ekspedisi</dt><dd>{order.ekspedisi||'—'}</dd>
-   <dt>Tanggal pesanan</dt><dd>{order.date}</dd>
-   <dt>SKU</dt><dd>{order.skus?order.skus.map(s=>s.sku+' × '+s.quantity).join(', '):order.sku+' × '+order.quantity}</dd>
-   <dt>Nilai</dt><dd>{money(order.totalAmount||order.amount)}</dd>
-   {order.status_resi_updated_at&&<><dt>Terakhir dicek</dt><dd>{new Date(order.status_resi_updated_at).toLocaleString('id-ID',{timeZone:'Asia/Jakarta'})} WIB</dd></>}
-   {detail?.masalah&&<><dt>Masalah</dt><dd className="danger-text">{detail.masalah}</dd></>}
-   {detail?.keterangan&&<><dt>Keterangan</dt><dd>{detail.keterangan}</dd></>}
-  </dl>
-  {order.resi&&<button className="primary" style={{marginTop:'1rem'}} disabled={checking} onClick={()=>onCheck(order)}>
-   {checking?<><RefreshCw size={15} className="spin"/> Mengecek…</>:<><RefreshCw size={15}/> Cek resi sekarang</>}
-  </button>}
-  {history.length>0&&<>
-   <h3 style={{marginTop:'1.5rem',marginBottom:'.5rem'}}>Riwayat pengiriman</h3>
-   <div className="tracking-timeline">
+
+  <div className="td-ekspedisi-row">
+   <span>Ekspedisi:</span>
+   <select value={editEksp} onChange={e=>setEditEksp(e.target.value)}>
+    <option value="">— Pilih —</option>
+    {COURIER_OPTIONS.map(c=><option key={c} value={c}>{c}</option>)}
+    {editEksp&&!COURIER_OPTIONS.includes(editEksp)&&<option value={editEksp}>{editEksp}</option>}
+   </select>
+   <button className="primary td-save-btn" disabled={saving||editEksp===order.ekspedisi} onClick={saveEkspedisi}>{saving?'…':'Simpan'}</button>
+  </div>
+
+  {history.length>0?<>
+   <div className="tracking-timeline" style={{marginTop:'1rem'}}>
     {history.map((h,i)=><div key={i} className="timeline-item">
      <div className="timeline-dot" style={{background:i===0?'var(--accent)':'var(--border)'}}/>
      <div><strong>{h.date||h.waktu||''}</strong><p>{h.desc||h.keterangan||h.description||''}</p></div>
     </div>)}
    </div>
-  </>}
+  </>:<p className="td-no-history">Belum ada history — klik "Cek Ulang".</p>}
+
+  {detail?.masalah&&<div className="td-problem"><AlertTriangle size={14}/> {detail.masalah}</div>}
+
+  <div className="td-actions">
+   <button className="td-close-btn" onClick={onClose}>Tutup</button>
+   {order.resi&&<button className="primary td-check-btn" disabled={checking} onClick={()=>onCheck(order)}>
+    {checking?<><RefreshCw size={15} className="spin"/> Mengecek…</>:<><RefreshCw size={15}/> Cek Ulang</>}
+   </button>}
+  </div>
  </div>;
 }
 
@@ -244,7 +267,7 @@ export default function Tracking({data,orders,onRefresh}){
   {toast&&<div className="toast">{toast}</div>}
 
   {modal&&<Modal title="Detail Tracking" onClose={()=>setModal(null)} wide>
-   <TrackingDetail order={modal} shop={data.shops.find(s=>s.id===modal.shop_id)} onCheck={handleCheck} checking={checking}/>
+   <TrackingDetail order={modal} shop={data.shops.find(s=>s.id===modal.shop_id)} onCheck={handleCheck} checking={checking} onClose={()=>setModal(null)}/>
   </Modal>}
  </>;
 }
