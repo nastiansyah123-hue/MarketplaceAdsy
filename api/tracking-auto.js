@@ -42,7 +42,6 @@ export default async function handler(req, res) {
       .from('mp_orders')
       .select('id, resi, ekspedisi, status_resi, status_resi_updated_at')
       .not('resi', 'is', null)
-      .not('status_resi', 'is', null)
       .not('status_resi', 'in', '("SAMPAI","RETUR")')
       .or(`status_resi_updated_at.is.null,status_resi_updated_at.lt.${tenMinAgo}`)
       .order('status_resi_updated_at', { ascending: true, nullsFirst: true })
