@@ -68,7 +68,7 @@ function App(){
  {page==='dashboard'&&<Dashboard data={scoped} selected={selected} f={f} onAll={()=>go('orders')} onProducts={()=>go('products-report')}/>}
  {page==='upload'&&<React.Suspense fallback={<Fallback/>}><LazyUpload data={scoped} onImport={importData}/></React.Suspense>}
  {page==='orders'&&<Orders data={scoped} rows={selected.orders} onDetail={row=>setModal({type:'order',row})}/>}
- {page==='tracking'&&<React.Suspense fallback={<Fallback/>}><LazyTracking data={scoped} orders={selected.orders}/></React.Suspense>}
+ {page==='tracking'&&<React.Suspense fallback={<Fallback/>}><LazyTracking data={scoped} orders={selected.orders} onRefresh={()=>refresh(['orders'])}/></React.Suspense>}
  {page==='exceptions'&&<ExceptionReport data={scoped} rows={selected.orders} onDetail={row=>setModal({type:'order',row})}/>}
  {page==='products-report'&&<><Stats selected={selected} data={scoped}/><ProductReport data={scoped} selected={selected}/></>}
  {page==='ads'&&<Ads data={scoped} selected={selected}/>}

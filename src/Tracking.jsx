@@ -1,6 +1,7 @@
-import React,{useState,useMemo}from'react';
+import React,{useState,useMemo,useEffect,useCallback}from'react';
 import{SearchBox,Empty,usePaging,Modal}from'./ui.jsx';
 import{money,num}from'./model.js';
+import{supabase}from'./db.js';
 import{RefreshCw,Truck,Package,MapPin,CheckCircle,AlertTriangle,Clock,ArrowRight,RotateCcw}from'lucide-react';
 
 const STAGES={
@@ -109,13 +110,34 @@ function TrackingDetail({order,shop,onCheck,checking}){
  </div>;
 }
 
-export default function Tracking({data,orders}){
+export default function Tracking({data,orders,onRefresh}){
  const[q,setQ]=useState('');
  const[stage,setStage]=useState('');
  const[shop,setShop]=useState('');
  const[modal,setModal]=useState(null);
  const[checking,setChecking]=useState(false);
+ const[refreshing,setRefreshing]=useState(false);
  const[toast,setToast]=useState('');
+ const[lastRefresh,setLastRefresh]=useState(Date.now());
+ useEffect(()=>{if(!toast)return;const t=setTimeout(()=>setToast(''),4000);return()=>clearTimeout(t);},[toast]);
+
+ // Supabase Realtime: auto-refresh saat status_resi berubah di DB
+ useEffect(()=>{
+  if(!supabase||!onRefresh)return;
+  const channel=supabase.channel('tracking-changes')
+   .on('postgres_changes',{event:'UPDATE',schema:'public',table:'mp_orders',filter:'status_resi=neq.NULL'},()=>{
+    onRefresh();setLastRefresh(Date.now());
+   }).subscribe();
+  return()=>{supabase.removeChannel(channel);};
+ },[onRefresh]);
+
+ const doRefresh=useCallback(async()=>{
+  if(!onRefresh||refreshing)return;
+  setRefreshing(true);
+  try{await onRefresh();setLastRefresh(Date.now());setToast('Data tracking diperbarui');}
+  catch{setToast('Gagal memperbarui data');}
+  finally{setRefreshing(false);}
+ },[onRefresh,refreshing]);
 
  // Group by order_id (1 order = 1 resi = 1 card)
  const trackable=useMemo(()=>{
@@ -171,6 +193,7 @@ export default function Tracking({data,orders}){
    const result=await res.json();
    if(!res.ok)throw new Error(result.error||'Gagal cek resi');
    setToast('Resi dicek: '+result.status_resi);
+   if(onRefresh){await onRefresh();setLastRefresh(Date.now());}
   }catch(e){
    setToast('Error: '+e.message);
   }finally{
@@ -192,8 +215,11 @@ export default function Tracking({data,orders}){
 
   <section className="panel">
    <div className="panel-heading">
-    <div><h2>Tracking Pesanan</h2><p>Status pengiriman berdasarkan resi dari file ekspor marketplace.</p></div>
-    <SearchBox value={q} onChange={setQ} placeholder="Cari pesanan / resi / SKU…"/>
+    <div><h2>Tracking Pesanan</h2><p>Status pengiriman berdasarkan resi dari file ekspor marketplace.{lastRefresh?' Terakhir: '+new Date(lastRefresh).toLocaleTimeString('id-ID',{timeZone:'Asia/Jakarta'}):''}</p></div>
+    <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
+     <button className="text-button" onClick={doRefresh} disabled={refreshing} title="Refresh data tracking" style={{display:'flex',alignItems:'center',gap:'4px',whiteSpace:'nowrap'}}><RefreshCw size={15} className={refreshing?'spin':''}/> Refresh</button>
+     <SearchBox value={q} onChange={setQ} placeholder="Cari pesanan / resi / SKU…"/>
+    </div>
    </div>
    <div className="table-toolbar">
     <select aria-label="Filter toko" value={shop} onChange={e=>setShop(e.target.value)}>
