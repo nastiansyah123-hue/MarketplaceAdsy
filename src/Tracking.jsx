@@ -78,12 +78,30 @@ function OrderCard({o,shop,onClick}){
  </div>;
 }
 
-const COURIER_OPTIONS=['SPX','J&T','JNE','SICEPAT','ANTERAJA','NINJA','IDEXPRESS','LION','SAP','POS','Lainnya'];
+const COURIER_OPTIONS=['SPX','J&T','JNE','SICEPAT','ANTERAJA','NINJA','IDEXPRESS','LION','SAP','POS'];
+
+// Detect courier short name from raw ekspedisi string (e.g. "Reguler (Cashless)-SPX Standard" → "SPX")
+function detectCourierName(raw){
+ if(!raw)return '';
+ const u=(raw||'').toUpperCase();
+ if(/SPX|SHOPEE/.test(u))return 'SPX';
+ if(/J&T|J\s*&\s*T|JNT/.test(u))return 'J&T';
+ if(/JNE/.test(u))return 'JNE';
+ if(/SICEPAT|SI CEPAT/.test(u))return 'SICEPAT';
+ if(/ANTERAJA|ANTER\s*AJA/.test(u))return 'ANTERAJA';
+ if(/NINJA/.test(u))return 'NINJA';
+ if(/IDEXPRESS|ID\s*EXPRESS/.test(u))return 'IDEXPRESS';
+ if(/LION/.test(u))return 'LION';
+ if(/SAP/.test(u))return 'SAP';
+ if(/POS\s|^POS$|POS\sINDONESIA/.test(u))return 'POS';
+ return raw;
+}
 
 function TrackingDetail({order,shop,onCheck,checking,onClose}){
  const detail=order.status_resi_detail;
  const history=detail?.history||[];
- const[editEksp,setEditEksp]=useState(order.ekspedisi||'');
+ const detectedCourier=detectCourierName(order.ekspedisi);
+ const[editEksp,setEditEksp]=useState(detectedCourier||order.ekspedisi||'');
  const[saving,setSaving]=useState(false);
 
  async function saveEkspedisi(){
@@ -97,7 +115,7 @@ function TrackingDetail({order,shop,onCheck,checking,onClose}){
 
  return <div className="form-body">
   <div className="td-header">
-   <div className="td-resi-line">{order.resi||'Belum ada resi'}{order.ekspedisi?' · '+order.ekspedisi:''}</div>
+   <div className="td-resi-line">{order.resi||'Belum ada resi'}{detectedCourier?' · '+detectedCourier:''}</div>
    {stageBadge(order.status_resi)}
   </div>
 
