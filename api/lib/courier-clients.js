@@ -54,14 +54,17 @@ export const MENGANTAR_COURIER_MAP = {
 // Auto-detect ekspedisi from resi prefix
 const COURIER_PREFIXES = [
   [/^SPXID|^SPX/i, 'SPX'],
-  [/^JP\d|^JD\d|^JX\d/i, 'J&T'],
-  [/^JNE|^CGK/i, 'JNE'],
+  [/^JP\d|^JD\d|^JX\d|^JY\d/i, 'J&T'],
+  [/^5707\d/i, 'J&T'],
+  [/^JNE|^CGK|^CM\d/i, 'JNE'],
+  [/^JT\d/i, 'JNE'],
   [/^00\d{11}$|^SCP/i, 'SICEPAT'],
   [/^ANT/i, 'ANTERAJA'],
   [/^NLKE|^NINJA/i, 'NINJA'],
   [/^IDE/i, 'IDEXPRESS'],
   [/^LP\d/i, 'LION'],
   [/^SAP/i, 'SAP'],
+  [/^SHPE/i, 'POS'],
   [/^\d{13}$/i, 'POS'],
 ];
 
@@ -70,10 +73,17 @@ export function detectCourier(resi, ekspedisi) {
   const r = resi.toUpperCase().trim();
   const e = (ekspedisi || '').toUpperCase();
 
-  // Check ekspedisi name first
-  if (/SPX|SHOPEE/.test(e)) return 'SPX';
-  if (/POS/.test(e)) return 'POS';
-  if (MENGANTAR_COURIER_MAP[e]) return e;
+  // Check ekspedisi name first (support long Shopee format like "Reguler (Cashless)-JNE Reguler")
+  if (/SPX|SHOPEE EXPRESS/.test(e)) return 'SPX';
+  if (/POS\s|POS$/.test(e)) return 'POS';
+  if (/J&T|J\&T|JNT/.test(e)) return 'J&T';
+  if (/JNE/.test(e)) return 'JNE';
+  if (/SICEPAT/.test(e)) return 'SICEPAT';
+  if (/ANTERAJA/.test(e)) return 'ANTERAJA';
+  if (/NINJA/.test(e)) return 'NINJA';
+  if (/IDEXPRESS|ID\s*EXPRESS/.test(e)) return 'IDEXPRESS';
+  if (/LION/.test(e)) return 'LION';
+  if (/SAP/.test(e)) return 'SAP';
 
   // Then check prefix
   for (const [re, name] of COURIER_PREFIXES) {
