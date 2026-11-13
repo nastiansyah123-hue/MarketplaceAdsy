@@ -234,6 +234,8 @@ export default function Tracking({data,orders,onRefresh}){
    const result=await res.json();
    if(!res.ok)throw new Error(result.error||'Gagal cek resi');
    setToast('Resi dicek: '+result.status_resi);
+   // Update modal langsung dengan result baru
+   setModal(prev=>prev?{...prev,status_resi:result.status_resi,status_resi_step:result.status_resi_step,status_resi_detail:result.detail,status_resi_updated_at:new Date().toISOString()}:prev);
    if(onRefresh){await onRefresh();setLastRefresh(Date.now());}
   }catch(e){
    setToast('Error: '+e.message);
@@ -284,7 +286,7 @@ export default function Tracking({data,orders,onRefresh}){
 
   {toast&&<div className="toast">{toast}</div>}
 
-  {modal&&<Modal title="Detail Tracking" onClose={()=>setModal(null)} wide>
+  {modal&&<Modal title="Detail Tracking" onClose={()=>setModal(null)}>
    <TrackingDetail order={modal} shop={data.shops.find(s=>s.id===modal.shop_id)} onCheck={handleCheck} checking={checking} onClose={()=>setModal(null)}/>
   </Modal>}
  </>;
