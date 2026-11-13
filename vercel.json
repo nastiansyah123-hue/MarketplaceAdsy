@@ -1,1 +1,1 @@
-{"buildCommand":"npm run build","outputDirectory":"dist","rewrites":[{"source":"/api/:path*","destination":"/api/:path*"},{"source":"/((?!assets/).*)","destination":"/index.html"}],"crons":[{"path":"/api/tracking-auto","schedule":"0 23 * * *"}]}
+{"buildCommand":"npm run build","outputDirectory":"dist","rewrites":[{"source":"/api/:path*","destination":"/api/:path*"},{"source":"/((?!assets/).*)","destination":"/index.html"}],"crons":[{"path":"/api/tracking-auto","schedule":"*/30 * * * *"}]}
