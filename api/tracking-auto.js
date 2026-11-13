@@ -73,29 +73,27 @@ export default async function handler(req, res) {
           return { date: dateStr, desc: r.description || r.tracking_name || '' };
         });
 
-        const patch = {
-          status_resi: stage,
-          status_resi_step: step,
-          status_resi_updated_at: new Date().toISOString(),
-          status_resi_detail: {
-            history,
-            masalah: detail?.masalah_kategori || null,
-            keterangan: history[0]?.desc || null,
-          },
-        };
-
         if (stage !== order.status_resi) {
-          const { error: updateErr } = await supabase
-            .from('mp_orders')
-            .update(patch)
-            .eq('id', order.id);
+          // Pakai RPC mp_update_tracking
+          const { error: updateErr } = await supabase.rpc('mp_update_tracking', {
+            p_order_id: order.id,
+            p_status_resi: stage,
+            p_status_resi_step: step,
+            p_status_resi_detail: {
+              history,
+              masalah: detail?.masalah_kategori || null,
+              keterangan: history[0]?.desc || null,
+            },
+          });
           if (!updateErr) updated++;
           else errors++;
         } else {
-          await supabase
-            .from('mp_orders')
-            .update({ status_resi_updated_at: new Date().toISOString() })
-            .eq('id', order.id);
+          // Update timestamp saja
+          await supabase.rpc('mp_update_tracking', {
+            p_order_id: order.id,
+            p_status_resi: order.status_resi,
+            p_status_resi_step: step,
+          });
         }
 
         await new Promise(r => setTimeout(r, 200));

@@ -10,23 +10,22 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
-async function checkResi(resi, ekspedisi, kota_tujuan) {
+async function checkResi(resi, ekspedisi) {
   const courier = detectCourier(resi, ekspedisi);
   if (!courier) throw new Error('Ekspedisi tidak dikenali dari resi: ' + resi);
 
   if (courier === 'SPX') {
     const data = await fetchSpx(resi);
     if (data.retcode !== 0) throw new Error(data.message || 'Resi tidak ditemukan');
-    return mapSpxStage(data, kota_tujuan);
+    return mapSpxStage(data, null);
   }
 
   if (courier === 'POS') {
     const data = await fetchPos(resi);
     if (data.error || !data.connote_code) throw new Error(data.error || 'Resi tidak ditemukan');
-    return mapPosStage(data, kota_tujuan);
+    return mapPosStage(data, null);
   }
 
-  // JNE, J&T, SiCepat, AnterAja, Ninja, IDExpress, Lion, SAP → Mengantar
   const mengantarCode = MENGANTAR_COURIER_MAP[courier];
   if (!mengantarCode) throw new Error('Ekspedisi belum didukung: ' + courier);
   const data = await fetchMengantar(resi, mengantarCode);
@@ -45,10 +44,10 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'order_id dan resi wajib diisi' });
     }
 
-    const { stage, detail } = await checkResi(resi, ekspedisi, null);
+    const { stage, detail } = await checkResi(resi, ekspedisi);
     const step = STAGE_STEP[stage] || 1;
 
-    // Format history for frontend (consistent format)
+    // Format history for frontend
     const history = (detail?.records || []).map(r => {
       let dateStr = '';
       if (r.actual_time) {
@@ -60,31 +59,29 @@ export default async function handler(req, res) {
       };
     });
 
-    const patch = {
-      status_resi: stage,
-      status_resi_step: step,
-      status_resi_updated_at: new Date().toISOString(),
-      status_resi_detail: {
-        history,
-        masalah: detail?.masalah_kategori || null,
-        keterangan: history[0]?.desc || null,
-      },
+    const detailForDb = {
+      history,
+      masalah: detail?.masalah_kategori || null,
+      keterangan: history[0]?.desc || null,
     };
 
-    const { error } = await supabase
-      .from('mp_orders')
-      .update(patch)
-      .eq('id', order_id);
+    // Pakai RPC mp_update_tracking (lebih cepat, no statement timeout)
+    const { error } = await supabase.rpc('mp_update_tracking', {
+      p_order_id: order_id,
+      p_status_resi: stage,
+      p_status_resi_step: step,
+      p_status_resi_detail: detailForDb,
+    });
 
     if (error) {
       console.error('DB update error:', error);
-      return res.status(500).json({ error: 'Gagal update status resi' });
+      return res.status(500).json({ error: 'Gagal update status resi: ' + error.message });
     }
 
     return res.status(200).json({
       status_resi: stage,
       status_resi_step: step,
-      detail: patch.status_resi_detail,
+      detail: detailForDb,
     });
   } catch (e) {
     console.error('Tracking check error:', e);
