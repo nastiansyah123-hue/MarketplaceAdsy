@@ -36,7 +36,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 
     const { data: orders, error } = await supabase
       .from('mp_orders')
@@ -44,7 +44,7 @@ export default async function handler(req, res) {
       .not('resi', 'is', null)
       .not('status_resi', 'is', null)
       .not('status_resi', 'in', '("SAMPAI","RETUR")')
-      .or(`status_resi_updated_at.is.null,status_resi_updated_at.lt.${thirtyMinAgo}`)
+      .or(`status_resi_updated_at.is.null,status_resi_updated_at.lt.${tenMinAgo}`)
       .order('status_resi_updated_at', { ascending: true, nullsFirst: true })
       .limit(20);
 
