@@ -1,11 +1,37 @@
+// Cek manual satu resi (tombol "Cek Ulang" di UI).
+// Routing: SPX → spx.co.id, POS → bosampuh.id, lainnya → Mengantar public API.
+
 import { createClient } from '@supabase/supabase-js';
-import { fetchTracking } from './lib/courier-clients.js';
-import { determineStage } from './lib/stage-engine.js';
+import { fetchSpx, fetchPos, fetchMengantar, detectCourier } from './lib/courier-clients.js';
+import { mapSpxStage, mapPosStage, mapMengantarStage, STAGE_STEP, MENGANTAR_COURIER_MAP } from './lib/stage-engine.js';
 
 const supabase = createClient(
   process.env.VITE_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY // service key for server-side updates
+  process.env.SUPABASE_SERVICE_KEY
 );
+
+async function checkResi(resi, ekspedisi, kota_tujuan) {
+  const courier = detectCourier(resi, ekspedisi);
+  if (!courier) throw new Error('Ekspedisi tidak dikenali dari resi: ' + resi);
+
+  if (courier === 'SPX') {
+    const data = await fetchSpx(resi);
+    if (data.retcode !== 0) throw new Error(data.message || 'Resi tidak ditemukan');
+    return mapSpxStage(data, kota_tujuan);
+  }
+
+  if (courier === 'POS') {
+    const data = await fetchPos(resi);
+    if (data.error || !data.connote_code) throw new Error(data.error || 'Resi tidak ditemukan');
+    return mapPosStage(data, kota_tujuan);
+  }
+
+  // JNE, J&T, SiCepat, AnterAja, Ninja, IDExpress, Lion, SAP → Mengantar
+  const mengantarCode = MENGANTAR_COURIER_MAP[courier];
+  if (!mengantarCode) throw new Error('Ekspedisi belum didukung: ' + courier);
+  const data = await fetchMengantar(resi, mengantarCode);
+  return mapMengantarStage(data);
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -19,28 +45,35 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'order_id dan resi wajib diisi' });
     }
 
-    // Fetch tracking from courier API
-    const trackingResult = await fetchTracking(resi, ekspedisi);
+    const { stage, detail } = await checkResi(resi, ekspedisi, null);
+    const step = STAGE_STEP[stage] || 1;
 
-    if (!trackingResult) {
-      return res.status(200).json({
-        status_resi: 'MANUAL',
-        message: 'Tidak bisa mengecek resi otomatis. Coba lagi nanti.'
-      });
-    }
+    // Format history for frontend (consistent format)
+    const history = (detail?.records || []).map(r => {
+      let dateStr = '';
+      if (r.actual_time) {
+        dateStr = new Date(r.actual_time * 1000).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+      }
+      return {
+        date: dateStr,
+        desc: r.description || r.tracking_name || '',
+      };
+    });
 
-    // Determine stage from tracking result
-    const stage = determineStage(trackingResult);
+    const patch = {
+      status_resi: stage,
+      status_resi_step: step,
+      status_resi_updated_at: new Date().toISOString(),
+      status_resi_detail: {
+        history,
+        masalah: detail?.masalah_kategori || null,
+        keterangan: history[0]?.desc || null,
+      },
+    };
 
-    // Update database
     const { error } = await supabase
       .from('mp_orders')
-      .update({
-        status_resi: stage.status_resi,
-        status_resi_step: stage.status_resi_step,
-        status_resi_detail: stage.detail,
-        status_resi_updated_at: new Date().toISOString()
-      })
+      .update(patch)
       .eq('id', order_id);
 
     if (error) {
@@ -49,10 +82,9 @@ export default async function handler(req, res) {
     }
 
     return res.status(200).json({
-      status_resi: stage.status_resi,
-      status_resi_step: stage.status_resi_step,
-      detail: stage.detail,
-      courier: trackingResult.courier
+      status_resi: stage,
+      status_resi_step: step,
+      detail: patch.status_resi_detail,
     });
   } catch (e) {
     console.error('Tracking check error:', e);

@@ -45,6 +45,7 @@ export async function fetchSpx(resi) {
 }
 
 // Mapping ekspedisi name → courier code for Mengantar API
+// (duplicated from stage-engine.js to avoid cross-import issues on Vercel)
 export const MENGANTAR_COURIER_MAP = {
   JNE: 'JNE', 'J&T': 'JT', SICEPAT: 'SiCepat', ANTERAJA: 'anteraja',
   NINJA: 'Ninja', IDEXPRESS: 'iDexpress', LION: 'lion', SAP: 'SAP',

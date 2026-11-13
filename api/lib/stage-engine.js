@@ -1,7 +1,11 @@
 // Stage engine -- SATU-SATUNYA tempat logic penentu stage tracking hidup.
 // Port dari Adsytraking-main/lib/stage-engine.js (versi paling matang, sudah divalidasi resi asli).
+// Self-contained: no cross-file imports (Vercel bundler compatibility).
 
-import { MENGANTAR_COURIER_MAP } from './courier-clients.js';
+export const MENGANTAR_COURIER_MAP = {
+  JNE: 'JNE', 'J&T': 'JT', SICEPAT: 'SiCepat', ANTERAJA: 'anteraja',
+  NINJA: 'Ninja', IDEXPRESS: 'iDexpress', LION: 'lion', SAP: 'SAP',
+};
 
 export const STAGE_STEP = {
   MENUNGGU_RESI: 1, BELUM_DICEK: 1, DIKIRIM: 2, KOTA_TUJUAN: 3, OTW: 4, SAMPAI: 5,
