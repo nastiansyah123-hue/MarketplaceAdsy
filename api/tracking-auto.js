@@ -46,7 +46,7 @@ export default async function handler(req, res) {
       .not('status_resi', 'in', '("SAMPAI","RETUR")')
       .or(`status_resi_updated_at.is.null,status_resi_updated_at.lt.${thirtyMinAgo}`)
       .order('status_resi_updated_at', { ascending: true, nullsFirst: true })
-      .limit(200);
+      .limit(20);
 
     if (error) throw error;
     if (!orders?.length) {
