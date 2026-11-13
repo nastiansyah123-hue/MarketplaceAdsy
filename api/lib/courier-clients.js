@@ -1,55 +1,56 @@
-// Courier API clients - all public endpoints, no auth required
+// HTTP mentah ke tiap sumber tracking -- TIDAK ada logic penentu stage di sini.
+// Port dari Adsytraking-main/lib/courier-clients.js (versi paling matang).
 
-export async function fetchMengantar(resi) {
-  const res = await fetch('https://app.mengantar.com/api/order/getPublic', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ waybill: resi })
+export async function fetchMengantar(trackingNumber, courier) {
+  const url = `https://app.mengantar.com/api/order/getPublic?tracking_number=${encodeURIComponent(trackingNumber)}&courier=${encodeURIComponent(courier)}`;
+  const r = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+      Accept: 'application/json',
+      Referer: 'https://www.mengantar.com/',
+      Origin: 'https://www.mengantar.com',
+    },
   });
-  if (!res.ok) return null;
-  const data = await res.json();
-  if (!data?.data) return null;
-  return {
-    courier: data.data.courier_name || '',
-    status: data.data.status || '',
-    records: (data.data.history || []).map(h => ({
-      date: h.date || '',
-      desc: h.desc || h.description || ''
-    }))
-  };
-}
-
-export async function fetchSpx(resi) {
-  const res = await fetch(`https://spx.co.id/shipment/order/tracking/v2?order_id=${encodeURIComponent(resi)}`);
-  if (!res.ok) return null;
-  const data = await res.json();
-  if (!data?.data?.tracking_list) return null;
-  return {
-    courier: 'SPX',
-    status: data.data.status || '',
-    records: data.data.tracking_list.map(t => ({
-      date: t.timestamp || '',
-      desc: t.message || ''
-    }))
-  };
+  return r.json();
 }
 
 export async function fetchPos(resi) {
-  const res = await fetch(`https://bosampuh.id/tracking?noresi=${encodeURIComponent(resi)}`);
-  if (!res.ok) return null;
-  const data = await res.json();
-  if (!data?.data?.history) return null;
-  return {
-    courier: 'POS',
-    status: data.data.status || '',
-    records: data.data.history.map(h => ({
-      date: h.date || '',
-      desc: h.description || ''
-    }))
-  };
+  const body = new URLSearchParams({ kode_booking: resi }).toString();
+  const r = await fetch('https://www.bosampuh.id/api_home/lacak_kiriman', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'X-Requested-With': 'XMLHttpRequest',
+      Accept: 'application/json, text/javascript, */*; q=0.01',
+      'User-Agent': 'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Mobile Safari/537.36',
+      Referer: 'https://www.bosampuh.id/',
+      Origin: 'https://www.bosampuh.id',
+    },
+    body,
+  });
+  const raw = await r.text();
+  return typeof raw === 'string' && raw.startsWith('"') ? JSON.parse(JSON.parse(raw)) : JSON.parse(raw);
 }
 
-// Auto-detect courier from resi prefix
+export async function fetchSpx(resi) {
+  const url = `https://spx.co.id/shipment/order/open/order/get_order_info?spx_tn=${encodeURIComponent(resi)}&language_code=id`;
+  const r = await fetch(url, {
+    headers: {
+      accept: 'application/json, text/plain, */*',
+      referer: `https://spx.co.id/track?${encodeURIComponent(resi)}`,
+      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    },
+  });
+  return r.json();
+}
+
+// Mapping ekspedisi name → courier code for Mengantar API
+export const MENGANTAR_COURIER_MAP = {
+  JNE: 'JNE', 'J&T': 'JT', SICEPAT: 'SiCepat', ANTERAJA: 'anteraja',
+  NINJA: 'Ninja', IDEXPRESS: 'iDexpress', LION: 'lion', SAP: 'SAP',
+};
+
+// Auto-detect ekspedisi from resi prefix
 const COURIER_PREFIXES = [
   [/^SPXID|^SPX/i, 'SPX'],
   [/^JP\d|^JD\d|^JX\d/i, 'J&T'],
@@ -71,22 +72,14 @@ export function detectCourier(resi, ekspedisi) {
   // Check ekspedisi name first
   if (/SPX|SHOPEE/.test(e)) return 'SPX';
   if (/POS/.test(e)) return 'POS';
+  if (MENGANTAR_COURIER_MAP[e]) return e;
 
   // Then check prefix
   for (const [re, name] of COURIER_PREFIXES) {
     if (re.test(r)) return name;
   }
 
-  // Default: try Mengantar (covers JNE, J&T, SiCepat, etc.)
-  return 'MENGANTAR';
+  return null;
 }
 
-export async function fetchTracking(resi, ekspedisi) {
-  const courier = detectCourier(resi, ekspedisi);
-  if (!courier) return null;
-
-  if (courier === 'SPX') return fetchSpx(resi);
-  if (courier === 'POS') return fetchPos(resi);
-  // All others go through Mengantar
-  return fetchMengantar(resi);
-}
+export const AUTO_EKSPEDISI_LIST = ['SPX', 'POS', 'JNE', 'J&T', 'SICEPAT', 'ANTERAJA', 'NINJA', 'IDEXPRESS', 'LION', 'SAP'];
